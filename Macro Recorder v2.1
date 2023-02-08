@@ -1,366 +1,585 @@
-;-----------------------------------
-;  Macro Recorder v2.1  By FeiYue
-;
-;  Description: This script records the mouse
-;  and keyboard actions and then plays back.
-;
-;  F1  -->  Record(Screen) (CoordMode, Mouse, Screen)
-;  F2  -->  Record(Window) (CoordMode, Mouse, Window)
-;  F3  -->  Stop   Record/Play
-;  F4  -->  Play   LogFile
-;  F5  -->  Edit   LogFile
-;  F6  -->  Pause  Record/Play
-;
-;  Note:
-;  1. press the Ctrl button individually
-;     to record the movement of the mouse.
-;  2. Shake the mouse on the Pause button,
-;     you can pause recording or playback.
-;-----------------------------------
+;##### Capture Keys #####
 
-#NoEnv
-SetBatchLines, -1
-Thread, NoTimers
-CoordMode, ToolTip
-SetTitleMatchMode, 2
-DetectHiddenWindows, On
-;--------------------------
-LogFile:=A_Temp . "\~Record.txt"
-UsedKeys:="F1,F2,F3,F4,F5,F6"
-Play_Title:=RegExReplace(LogFile,".*\\") " ahk_class AutoHotkey"
-;--------------------------
-Gui, +AlwaysOnTop -Caption +ToolWindow +E0x08000000 +Hwndgui_id
-Gui, Margin, 0, 0
-Gui, Font, s12
-s:="[F1]Record(Screen),[F2]Record(Window),"
-  . "[F3]Stop,[F4]Play,[F5]Edit,[F6] Pause "
-For i,v in StrSplit(s, ",")
+MainLoop:
+If (!Capt || !ListFocus)
 {
-  j:=i=1 ? "":"x+0", j.=InStr(v,"Pause") ? " vPause":""
-  Gui, Add, Button, %j% gRun, %v%
+	SetTimer, MainLoop, Off
+	GoSub, Capt
+	return
 }
-Gui, Add, Button, x+0 w0 Hidden vMyText
-Gui, Show, NA y0, Macro Recorder
-OnMessage(0x200,"WM_MOUSEMOVE")
-;--------------------------
-SetTimer, OnTop, 2000
-OnTop:
-Gui, +AlwaysOnTop
-return
-
-Run:
-if IsLabel(k:=RegExReplace(RegExReplace(A_GuiControl,".*]"),"\W"))
-  Goto, %k%
-return
-
-WM_MOUSEMOVE() {
-  static OK_Time
-  ListLines, Off
-  if (A_Gui=1) and (A_GuiControl="Pause")
-    and (t:=A_TickCount)>OK_Time
-  {
-    OK_Time:=t+500
-    Gosub, Pause
-  }
-}
-
-ShowTip(s:="", pos:="y35", color:="Red|00FFFF") {
-  static bak, idx
-  if (bak=color "," pos "," s)
-    return
-  bak:=color "," pos "," s
-  SetTimer, ShowTip_ChangeColor, Off
-  Gui, ShowTip: Destroy
-  if (s="")
-    return
-  ; WS_EX_NOACTIVATE:=0x08000000, WS_EX_TRANSPARENT:=0x20
-  Gui, ShowTip: +LastFound +AlwaysOnTop +ToolWindow -Caption +E0x08000020
-  Gui, ShowTip: Color, FFFFF0
-  WinSet, TransColor, FFFFF0 150
-  Gui, ShowTip: Margin, 10, 5
-  Gui, ShowTip: Font, Q3 s20 bold
-  Gui, ShowTip: Add, Text,, %s%
-  Gui, ShowTip: Show, NA %pos%, ShowTip
-  SetTimer, ShowTip_ChangeColor, 1000
-  ShowTip_ChangeColor:
-  Gui, ShowTip: +AlwaysOnTop
-  r:=StrSplit(SubStr(bak,1,InStr(bak,",")-1),"|")
-  Gui, ShowTip: Font, % "Q3 c" r[idx:=Mod(Round(idx),r.length())+1]
-  GuiControl, ShowTip: Font, Static1
-  return
-}
-
-
-;============ Hotkey =============
-
-
-F1::
-Suspend, Permit
-Goto, RecordScreen
-
-F2::
-Suspend, Permit
-Goto, RecordWindow
-
-RecordScreen:
-RecordWindow:
-if (Recording or Playing)
-  return
-Coord:=InStr(A_ThisLabel,"Win") ? "Window":"Screen"
-LogArr:=[], oldid:="", Log(), Recording:=1, SetHotkey(1)
-ShowTip("Recording")
-return
-
-
-F3::
-Stop:
-Suspend, Permit
-if Recording
+Input, sKey, M L1 T10, %VirtualKeys%
+If (ErrorLevel = "NewInput")
+	return
+If (ErrorLevel = "Timeout")
 {
-  if (LogArr.MaxIndex()>0)
-  {
-    s:="`nLoop, 1`n{`n`nSetTitleMatchMode, 2"
-      . "`nCoordMode, Mouse, " Coord "`n"
-    For k,v in LogArr
-      s.="`n" v "`n"
-    s.="`nSleep, 1000`n`n}`n"
-    s:=RegExReplace(s,"\R","`n")
-    FileDelete, %LogFile%
-    FileAppend, %s%, %LogFile%
-    s:=""
-  }
-  SetHotkey(0), Recording:=0, LogArr:=""
+	SetTimer, MainLoop, Off
+	GoSub, Capt
+	return
 }
-else if Playing
+sKey := (ErrorLevel != "Max") ? SubStr(ErrorLevel, 8) : sKey
+If sKey in %A_Space%,`n,`t
+	return
+GoSub, ChReplace
+If (InStr(sKey, "_") < 1)
+	If (Asc(sKey) < 192) && ((sKey != "/") && (sKey != ".") && (!GetKeyState(sKey, "P")))
+		return
+If ((GetKeyState("RAlt", "P")) && (!HoldRAlt))
+	sKey := "RAlt", HoldRAlt := 1
+If (Asc(sKey) < 192) && ((CaptKDn = 1) || InStr(sKey, "Control") || InStr(sKey, "Shift")
+|| InStr(sKey, "Alt") || InStr(sKey, "Win"))
 {
-  WinGet, list, List, %Play_Title%
-  Loop, % list
-    if WinExist("ahk_id " list%A_Index%)!=A_ScriptHwnd
-    {
-      WinGet, pid, PID
-      WinClose,,, 3
-      IfWinExist
-        Process, Close, %pid%
-    }
-  SetTimer, CheckPlay, Off
-  Playing:=0
+	ScK := GetKeySC(sKey)
+	If (Hold%ScK%)
+		return
+	Hotkey, If
+	#If
+	If (sKey = "/")
+		Try HotKey, ~*VKC1SC730 Up, RecKeyUp, On
+	Else
+		HotKey, ~*%sKey% Up, RecKeyUp, On
+	If (sKey = ".")
+		Try HotKey, ~*VKC2SC7E0 Up, RecKeyUp, On
+	Hotkey, If
+	#If
+	Hold%ScK% := 1, sKey .= " Down"
 }
-ShowTip()
-Suspend, Off
-Pause, Off
-GuiControl,, Pause, % "[F6] Pause "
-isPaused:=0
+Else If ((StrLen(sKey) = 1) && (!GetKeyState("CapsLock", "T")))
+	StringLower, sKey, sKey
+tKey := sKey, sKey := "{" sKey "}"
+If (!Capt)
+	SetTimer, MainLoop, Off
+If (ListFocus)
+	GoSub, InsertRow
 return
 
-
-F4::
-Play:
-Suspend, Permit
-if (Recording or Playing)
-  Gosub, Stop
-ahk:=A_IsCompiled ? A_ScriptDir "\AutoHotkey.exe" : A_AhkPath
-IfNotExist, %ahk%
+KeyboardRecord:
+If (Record = 0)
 {
-  MsgBox, 4096, Error, Can't Find %ahk% !
-  Exit
+	SetTimer, KeyboardRecord, Off
+	return
 }
-Run, %ahk% /r "%LogFile%"
-SetTimer, CheckPlay, 500
-Gosub, CheckPlay
-return
-
-CheckPlay:
-Check_OK:=0
-WinGet, list, List, %Play_Title%
-Loop, % list
-  if (list%A_Index%!=A_ScriptHwnd)
-    Check_OK:=1
-if Check_OK
-  Playing:=1, ShowTip("Playing")
-else if Playing
+Input, sKey, V M L1 T3, %VirtualKeys%
+If ((ErrorLevel = "NewInput") || (ErrorLevel = "Timeout"))
 {
-  SetTimer, CheckPlay, Off
-  Playing:=0, ShowTip()
+	SetTimer, KeyboardRecord, Off
+	SetTimer, KeyboardRecord, -1
+	return
 }
-return
-
-
-F5::
-Edit:
-Suspend, Permit
-Gosub, Stop
-Run, notepad.exe "%LogFile%"
-return
-
-
-F6::
-Pause:
-Suspend, Permit
-if Recording
+sKey := (ErrorLevel != "Max") ? SubStr(ErrorLevel, 8) : sKey
+If sKey in %A_Space%,`n,`t
 {
-  Suspend
-  Pause, % A_IsSuspended ? "On":"Off", 1
-  isPaused:=A_IsSuspended, Log()
+	SetTimer, KeyboardRecord, Off
+	SetTimer, KeyboardRecord, -1
+	return
 }
-else if Playing
+GoSub, ChReplace
+If (InStr(sKey, "_") < 1)
 {
-  isPaused:=!isPaused
-  WinGet, list, List, %Play_Title%
-  Loop, %list%
-    if WinExist("ahk_id " list%A_Index%)!=A_ScriptHwnd
-      PostMessage, 0x111, 65306
+	If (Asc(sKey) < 192) && ((sKey != "/") && (sKey != ".") && (sKey != "?") && (!GetKeyState(sKey, "P")))
+	{
+		SetTimer, KeyboardRecord, Off
+		SetTimer, KeyboardRecord, -1
+		return
+	}
 }
-else return
-if isPaused
-  GuiControl,, Pause, [F6]<Pause>
-else
-  GuiControl,, Pause, % "[F6] Pause "
+If ((GetKeyState("RAlt", "P")) && (!HoldRAlt))
+	sKey := "RAlt", HoldRAlt := 1
+If (Asc(sKey) < 192) && ((CaptKDn = 1) || InStr(sKey, "Control") || InStr(sKey, "Shift")
+|| InStr(sKey, "Alt") || InStr(sKey, "Win"))
+{
+	ScK := GetKeySC(sKey)
+	If (Hold%ScK%)
+	{
+		SetTimer, KeyboardRecord, Off
+		SetTimer, KeyboardRecord, -1
+		return
+	}
+	Hotkey, If
+	#If
+	If (sKey = "/")
+		Try HotKey, ~*VKC1SC730 Up, RecKeyUp, On
+	Else
+		HotKey, ~*%sKey% Up, RecKeyUp, On
+	If (sKey = ".")
+		Try HotKey, ~*VKC2SC7E0 Up, RecKeyUp, On
+	Hotkey, If
+	#If
+	Hold%ScK% := 1, sKey .= " Down"
+}
+Else If ((StrLen(sKey) = 1) && (!GetKeyState("CapsLock", "T")))
+	StringLower, sKey, sKey
+tKey := sKey, sKey := "{" sKey "}"
+If (Record = 0)
+{
+	SetTimer, KeyboardRecord, Off
+	return
+}
+GoSub, InsertRow
+SetTimer, KeyboardRecord, Off
+SetTimer, KeyboardRecord, -1
 return
 
-
-;============ Functions =============
-
-
-SetHotkey(f:=0) {
-  ; These keys are already used as hotkeys
-  global UsedKeys
-  f:=f ? "On":"Off"
-  Loop, 254
-  {
-    k:=GetKeyName(vk:=Format("vk{:X}", A_Index))
-    if k not in ,Control,Alt,Shift,%UsedKeys%
-      Hotkey, ~*%vk%, LogKey, %f% UseErrorLevel
-  }
-  For i,k in StrSplit("NumpadEnter|Home|End|PgUp"
-    . "|PgDn|Left|Right|Up|Down|Delete|Insert", "|")
-  {
-    sc:=Format("sc{:03X}", GetKeySC(k))
-    if k not in ,Control,Alt,Shift,%UsedKeys%
-      Hotkey, ~*%sc%, LogKey, %f% UseErrorLevel
-  }
-  SetTimer, LogWindow, %f%
-  if (f="On")
-    Gosub, LogWindow
+InsertRow:
+Type := cType1, Target := "", Window := ""
+If (Record = 1)
+{
+	If (RecKeybdCtrl = 1)
+	{
+		If ((InStr(sKey, "Control")) || (InStr(sKey, "Shift"))
+		|| (InStr(sKey, "Alt")))
+			Goto, KeyInsert
+		ControlGetFocus, ActiveCtrl, A
+		If (ActiveCtrl != "")
+		{
+			Type := cType2, Target := ActiveCtrl
+			WinGetTitle, c_Title, A
+			WinGetClass, c_Class, A
+			If (WTitle = 1)
+				Window := c_Title
+			If (WClass = 1)
+				Window := Window " ahk_class " c_Class
+			If ((WTitle = 0) && (WClass = 0))
+				Window := "A"
+		}
+	}
 }
-
-LogKey:
-LogKey()
+KeyInsert:
+Gui, chMacro:Default
+If (Record = 1)
+{
+	If (TimedI = 1)
+	{
+		If (Interval := TimeRecord())
+		{
+			If (Interval > TDelay)
+			GoSub, SleepInput
+		}
+		InputDelay := 0, WinDelay := 0
+	}
+	Else
+		InputDelay := DelayG, WinDelay := DelayW
+	If ((WClass = 1) || (WTitle = 1))
+		WindowRecord(A_List, WinDelay)
+}
+Else
+	InputDelay := DelayG
+RowSelection := LV_GetCount("Selected")
+If (Record || RowSelection = 0)
+{
+	LV_Add("Check Icon" IconsNames["keystroke"], ListCount%A_List%+1, tKey, sKey, 1, InputDelay, Type, Target, Window)
+,	LV_Modify(ListCount%A_List%+1, "Vis")
+}
+Else
+{
+	RowNumber := 0
+	Loop, %RowSelection%
+	{
+		RowNumber := LV_GetNext(RowNumber)
+	,	LV_Insert(RowNumber, "Check Icon" IconsNames["keystroke"], RowNumber, tKey, sKey, 1, DelayG, Type, Target, Window)
+	,	LVManager[A_List].InsertAtGroup(1, RowNumber)
+	,	RowNumber++
+	}
+	LV_Modify(RowNumber, "Vis")
+}
 return
 
-LogWindow:
-LogWindow()
+RecKeyUp:
+If (!GetKeyState("RAlt", "P"))
+	HoldRAlt := 0
+If (Record = 0)
+{
+	Gui, 1:Submit, NoHide
+	If (Capt = 0)
+	{
+		HotKey, %A_ThisHotKey%, RecKeyUp, Off
+		return
+	}
+}
+StringTrimLeft, sKey, A_ThisHotKey, 2
+If (sKey = "VKC1SC730 Up")
+	sKey := "/ Up"
+Else If (sKey = "VKC2SC7E0 Up")
+	sKey := ". Up"
+ScK := GetKeySC(RegExReplace(sKey, " Up$"))
+Hold%ScK% := 0, tKey := sKey, sKey := "{" sKey "}"
+If (Record || ListFocus)
+	GoSub, InsertRow
+HotKey, %A_ThisHotKey%, RecKeyUp, Off
+If (InStr(A_ThisHotKey, "Win"))
+	Send, %sKey%
 return
 
-LogKey() {
-  Critical
-  k:=GetKeyName(vksc:=SubStr(A_ThisHotkey,3))
-  k:=StrReplace(k,"Control","Ctrl"), r:=SubStr(k,2)
-  if r in Alt,Ctrl,Shift,Win
-    LogKey_Control(k)
-  else if k in LButton,RButton,MButton
-    LogKey_Mouse(k)
-  else
-  {
-    if (k="NumpadLeft" or k="NumpadRight") and !GetKeyState(k,"P")
-      return
-    k:=StrLen(k)>1 ? "{" k "}" : k~="\w" ? k : "{" vksc "}"
-    Log(k,1)
-  }
+MouseRecord:
+If (Moves = 1) && (MouseMove := MoveCheck())
+{
+	Action := MAction2, Details := MouseMove ", 0"
+,	Type := cType3, Target := "", Window := ""
+	GoSub, MouseAdd
+}
+If (!GetKeyState(RelKey, ToggleMode))
+	RelHold := 0, Relative := ""
+If (MScroll = 1)
+{
+	If (mScUp > 0 && A_TimeIdle > 50)
+	{
+		If (RecMouseCtrl = 1)
+			Details := ClickOn(xPos, yPos, "WheelUp", Up)
+		Else
+			Details := "WheelUp, " Up
+		Action := MAction5, Type := cType3
+		GoSub, MouseInput
+		mScUp := 0
+	}
+	If (mScDn > 0 && A_TimeIdle > 50)
+	{
+		If (RecMouseCtrl = 1)
+			Details := ClickOn(xPos, yPos, "WheelDown", Dn)
+		Else
+			Details := "WheelDown, " Dn
+		Action := MAction6, Type := cType3
+		GoSub, MouseInput
+		mScDn := 0
+	}
+}
+return
+
+Replace:
+If (InStr(sKey, "_"))
+	StringReplace, tKey, tKey, _, %A_Space%, All
+If (InStr(tKey, "+"))
+	StringReplace, sKey, tKey, +, Shift Down}{
+If (InStr(tKey, "^"))
+	StringReplace, sKey, tKey, ^, Control Down}{
+If (InStr(tKey, "!"))
+	StringReplace, sKey, tKey, !, Alt Down}{
+If (InStr(sKey, "+"))
+	StringReplace, sKey, sKey, +, Shift Down}{
+If (InStr(sKey, "^"))
+	StringReplace, sKey, sKey, ^, Control Down}{
+If (InStr(sKey, "!"))
+	StringReplace, sKey, sKey, !, Alt Down}{
+
+If (InStr(sKey, "Alt Down"))
+	sKey := sKey "}{Alt Up"
+If (InStr(sKey, "Control Down"))
+	sKey := sKey "}{Control Up"
+If (InStr(sKey, "Shift Down"))
+	sKey := sKey "}{Shift Up"
+
+StringGetPos, pos, tKey, +
+If (pos = 0)
+	StringReplace, tKey, tKey, +, Shift +%A_Space%
+If (InStr(tKey, "^"))
+	StringReplace, tKey, tKey, ^, Control +%A_Space%
+If (InStr(tKey, "!"))
+	StringReplace, tKey, tKey, !, Alt +%A_Space%
+
+If (InStr(tKey, "Numpad"))
+	StringReplace, tKey, tKey, Numpad, Num%A_Space%
+return
+
+ChReplace:
+Loop, 26
+{
+	Transform, Ch, Chr, %A_Index%
+	StringReplace, sKey, sKey, %Ch%, % Chr(96+A_Index)
+}
+return
+
+#If ((Record = 1) && (Mouse = 1) && (!A_IsPaused))
+*~LButton::
+	Critical
+	; Send, {Blind}{LButton Down}
+	CoordMode, Mouse, %CoordMouse%
+	MouseGetPos,,, id, control
+	WinGetClass, m_Class, ahk_id %id%
+	If ((InStr(m_Class, "#32") > 1) && (m_Class != "Button")
+	&& (id != PMCWinID) && (id != PrevID) && (id != PMCOSC))
+		WinActivate, ahk_id %id%
+	MouseGetPos, xPd, yPd
+	Button := "Left"
+,	Details := ClickOn(xPd, yPd, Button) ((RecMouseCtrl = 1) ? ", Down" : "Down")
+,	Action := Button " " MAction3, Type := cType3
+	GoSub, MouseInput
+return
+*~LButton Up::
+	Critical
+	; Send, {Blind}{LButton Up}
+	CoordMode, Mouse, %CoordMouse%
+	MouseGetPos, xPd, yPd
+	Button := "Left"
+,	Details := ClickOn(xPd, yPd, Button) ((RecMouseCtrl = 1) ? ", Up" : "Up")
+,	Action := Button " " MAction3, Type := cType3
+	GoSub, MouseInput
+return
+*~RButton::
+	Critical
+	; Send, {Blind}{RButton Down}
+	CoordMode, Mouse, %CoordMouse%
+	MouseGetPos,,, id, control
+	WinGetClass, m_Class, ahk_id %id%
+	If ((InStr(m_Class, "#32") > 1) && (m_Class != "Button")
+	&& (id != PMCWinID) && (id != PrevID) && (id != PMCOSC))
+		WinActivate, ahk_id %id%
+	MouseGetPos, xPd, yPd
+	Button := "Right"
+,	Details := ClickOn(xPd, yPd, Button) ((RecMouseCtrl = 1) ? ", Down" : "Down")
+,	Action := Button " " MAction3, Type := cType3
+	GoSub, MouseInput
+return
+*~RButton Up::
+	Critical
+	; Send, {Blind}{RButton Up}
+	CoordMode, Mouse, %CoordMouse%
+	MouseGetPos, xPd, yPd
+	Button := "Right"
+,	Details := ClickOn(xPd, yPd, Button) ((RecMouseCtrl = 1) ? ", Up" : "Up")
+,	Action := Button " " MAction3, Type := cType3
+	GoSub, MouseInput
+return
+*~MButton::
+	Critical
+	; Send, {Blind}{MButton Down}
+	CoordMode, Mouse, %CoordMouse%
+	MouseGetPos,,, id, control
+	WinGetClass, m_Class, ahk_id %id%
+	If ((InStr(m_Class, "#32") > 1) && (m_Class != "Button")
+	&& (id != PMCWinID) && (id != PrevID) && (id != PMCOSC))
+		WinActivate, ahk_id %id%
+	MouseGetPos, xPd, yPd
+	Button := "Middle"
+,	Details := ClickOn(xPd, yPd, Button) ((RecMouseCtrl = 1) ? ", Down" : "Down")
+,	Action := Button " " MAction3, Type := cType3
+	GoSub, MouseInput
+return
+*~MButton Up::
+	Critical
+	; Send, {Blind}{MButton Up}
+	CoordMode, Mouse, %CoordMouse%
+	MouseGetPos, xPd, yPd
+	Button := "Middle"
+,	Details := ClickOn(xPd, yPd, Button) ((RecMouseCtrl = 1) ? ", Up" : "Up")
+,	Action := Button " " MAction3, Type := cType3
+	GoSub, MouseInput
+return
+*~XButton1::
+	Critical
+	; Send, {Blind}{XButton1 Down}
+	CoordMode, Mouse, %CoordMouse%
+	MouseGetPos,,, id, control
+	WinGetClass, m_Class, ahk_id %id%
+	If ((InStr(m_Class, "#32") > 1) && (m_Class != "Button")
+	&& (id != PMCWinID) && (id != PrevID) && (id != PMCOSC))
+		WinActivate, ahk_id %id%
+	MouseGetPos, xPd, yPd
+	Button := "X1"
+,	Details := ClickOn(xPd, yPd, Button) ((RecMouseCtrl = 1) ? ", Down" : "Down")
+,	Action := Button " " MAction3, Type := cType3
+	GoSub, MouseInput
+return
+*~XButton1 Up::
+	Critical
+	; Send, {Blind}{XButton1 Up}
+	CoordMode, Mouse, %CoordMouse%
+	MouseGetPos, xPd, yPd
+	Button := "X1"
+,	Details := ClickOn(xPd, yPd, Button) ((RecMouseCtrl = 1) ? ", Up" : "Up")
+,	Action := Button " " MAction3, Type := cType3
+	GoSub, MouseInput
+return
+*~XButton2::
+	Critical
+	; Send, {Blind}{XButton2 Down}
+	CoordMode, Mouse, %CoordMouse%
+	MouseGetPos,,, id, control
+	WinGetClass, m_Class, ahk_id %id%
+	If ((InStr(m_Class, "#32") > 1) && (m_Class != "Button")
+	&& (id != PMCWinID) && (id != PrevID) && (id != PMCOSC))
+		WinActivate, ahk_id %id%
+	MouseGetPos, xPd, yPd
+	Button := "X2"
+,	Details := ClickOn(xPd, yPd, Button) ((RecMouseCtrl = 1) ? ", Down" : "Down")
+,	Action := Button " " MAction3, Type := cType3
+	GoSub, MouseInput
+return
+*~XButton2 Up::
+	Critical
+	; Send, {Blind}{XButton2 Up}
+	CoordMode, Mouse, %CoordMouse%
+	MouseGetPos, xPd, yPd
+	Button := "X2"
+,	Details := ClickOn(xPd, yPd, Button) ((RecMouseCtrl = 1) ? ", Up" : "Up")
+,	Action := Button " " MAction3, Type := cType3
+	GoSub, MouseInput
+return
+#If
+
+MWUp:
+mScUp++
+return
+
+MWDn:
+mScDn++
+return
+
+MouseInput:
+If (id = PMCOSC)
+	return
+Target := "", Window := ""
+If ((RecMouseCtrl = 1) && (InStr(m_Class, "#32") > 1))
+{
+	If ((InStr(Details, "rel")) || (InStr(Details, "click")))
+		Goto, MouseAdd
+	CoordMode, Mouse, %CoordMouse%
+	If (control != "")
+	{
+		ControlGetPos, x, y,,, %control%, A
+		xcpos := Controlpos(xPd, x), ycpos := Controlpos(yPd, y)
+	,	Details := RegExReplace(Details, "\d+, \d+ ")
+		If (xcpos != "")
+			Details .= " x" xcpos " y" ycpos " NA"
+		Else
+			Details .= " NA"
+		Target := control
+	}
+	Else
+	{
+		Details := RegExReplace(Details, "\d+, \d+ ")
+	,	Details .= " NA"
+	,	Target := "x" xPd " y" yPd
+	}
+	Action := Button " " MAction1, Type := cType4
+	WinGetTitle, c_Title, A
+	WinGetClass, c_Class, A
+	If (WTitle = 1)
+		Window := c_Title
+	If (WClass = 1)
+		Window := Window " ahk_class " c_Class
+	If ((WTitle = 0) && (WClass = 0))
+		Window := "A"
+}
+MouseAdd:
+Gui, chMacro:Default
+If (TimedI = 1)
+{
+	If (Interval := TimeRecord())
+	{
+		If (Interval > TDelay)
+		GoSub, SleepInput
+	}
+	RecDelay := 0, WinDelay := 0
+}
+Else
+	RecDelay := DelayM, WinDelay := DelayW
+If (!InStr(Details, "Up") && (Action != MAction2))
+{
+	If ((WClass = 1) || (WTitle = 1))
+		WindowRecord(A_List, WinDelay)
+}
+LV_Add("Check", ListCount%A_List%+1, Action, Details, 1, RecDelay, Type, Target, Window)
+return
+
+SleepInput:
+LV_Add("Check", ListCount%A_List%+1, "[Pause]", "", 1, Interval, cType5)
+return
+
+WindowRecord(ListID, WinDelay)
+{
+	global p_Title, p_Class, WTitle, WClass
+	WinGetTitle, c_Title, A
+	WinGetClass, c_Class, A
+	If ((c_Class = "") && (c_Title = ""))
+		return
+	If (WTitle = 1)
+	{
+		Window := c_Title
+		If (WClass = 1)
+			Window := Window " ahk_class " c_Class
+	}
+	Else
+	{
+		If (WClass = 1)
+			Window := "ahk_class " c_Class
+	}
+	If (c_Class = p_Class)
+	{
+		If (WTitle = 0)
+			return
+		Else
+		{
+			If (c_Title = p_Title)
+				return
+			Else
+				LV_Add("Check", ListCount%ListID%+1, "WinActivate", "", 1, WinDelay, "WinActivate", "", Window)
+		}
+	}
+	Else
+		LV_Add("Check", ListCount%ListID%+1, "WinActivate", "", 1, WinDelay, "WinActivate", "", Window)
+	p_Class := c_Class, p_Title := c_Title
 }
 
-LogKey_Control(key) {
-  global LogArr, Coord
-  k:=InStr(key,"Win") ? key : SubStr(key,2)
-  if (k="Ctrl")
-  {
-    CoordMode, Mouse, %Coord%
-    MouseGetPos, X, Y
-  }
-  Log("{" k " Down}",1)
-  Critical, Off
-  KeyWait, %key%
-  Critical
-  Log("{" k " Up}",1)
-  if (k="Ctrl")
-  {
-    i:=LogArr.MaxIndex(), r:=LogArr[i]
-    if InStr(r,"{Blind}{Ctrl Down}{Ctrl Up}")
-      LogArr[i]:="MouseMove, " X ", " Y
-  }
+ClickOn(xPos, yPos, Button, Click := "")
+{
+	global RelHold, LastPos, RelKey, Toggle
+	If (RelHold = 1)
+	{
+		Loop, Parse, LastPos, /
+			iPar%A_Index% := A_LoopField
+		Relative := RelToLastPos(iPar1, iPar2, xPos, yPos)
+	}
+	LastPos := xPos "/" yPos
+	If GetKeyState(RelKey, Toggle)
+	{
+		xPos := "Rel 0"
+		yPos := 0
+		RelHold := 1
+	}
+	If (Relative != "")
+		Details := Relative " " Button ", " Click
+	Else
+		Details := xPos ", " yPos " " Button ", " Click
+	return Details
 }
 
-LogKey_Mouse(key) {
-  global gui_id, LogArr, Coord
-  k:=SubStr(key,1,1)
-  CoordMode, Mouse, %Coord%
-  MouseGetPos, X, Y, id
-  if (id=gui_id)
-    return
-  Log("MouseClick, " k ", " X ", " Y ",,, D")
-  CoordMode, Mouse, Screen
-  MouseGetPos, X1, Y1
-  t1:=A_TickCount
-  Critical, Off
-  KeyWait, %key%
-  Critical
-  t2:=A_TickCount
-  if (t2-t1<=200)
-    X2:=X1, Y2:=Y1
-  else
-    MouseGetPos, X2, Y2
-  i:=LogArr.MaxIndex(), r:=LogArr[i]
-  if InStr(r, ",,, D") and Abs(X2-X1)+Abs(Y2-Y1)<5
-    LogArr[i]:=SubStr(r,1,-5), Log()
-  else
-    Log("MouseClick, " k ", " (X+X2-X1) ", " (Y+Y2-Y1) ",,, U")
+RelToLastPos(lX, lY, cX, cY)
+{
+	cX -= lX
+	cY -= lY
+	return "Rel " cX "`, " cY
 }
 
-LogWindow() {
-  global oldid, LogArr
-  static oldtitle
-  id:=WinExist("A")
-  WinGetTitle, title
-  WinGetClass, class
-  if (title="" and class="")
-    return
-  if (id=oldid and title=oldtitle)
-    return
-  oldid:=id, oldtitle:=title
-  title:=SubStr(title,1,50)
-  if (!A_IsUnicode)
-  {
-    GuiControl,, MyText, %title%
-    GuiControlGet, s,, MyText
-    if (s!=title)
-      title:=SubStr(title,1,-1)
-  }
-  title.=class ? " ahk_class " class : ""
-  title:=RegExReplace(Trim(title), "[``%;]", "``$0")
-  s:="tt = " title "`nWinWait, %tt%"
-    . "`nIfWinNotActive, %tt%,, WinActivate, %tt%"
-  i:=LogArr.MaxIndex(), r:=LogArr[i]
-  if InStr(r,"tt = ")=1
-    LogArr[i]:=s, Log()
-  else
-    Log(s)
+MoveCheck()
+{
+	global MDelay, LastPos, RelKey, Toggle, CoordMouse
+	CoordMode, Mouse, %CoordMouse%
+	MouseGetPos, xPos, yPos
+	If (LastPos = xPos "/" yPos)
+		return
+	If (A_TimeIdle < MDelay)
+		return
+	If GetKeyState(RelKey, Toggle)
+	{
+		Loop, Parse, LastPos, /
+			iPar%A_Index% := A_LoopField
+		MovedPos := RelToLastPos(iPar1, iPar2, xPos, yPos)
+	}
+	Else
+		MovedPos := xPos ", " yPos
+	LastPos := xPos "/" yPos
+	return MovedPos
 }
 
-Log(str:="", Keyboard:=0) {
-  global LogArr
-  static LastTime
-  t:=A_TickCount, Delay:=(LastTime ? t-LastTime:0), LastTime:=t
-  IfEqual, str,, return
-  i:=LogArr.MaxIndex(), r:=LogArr[i]
-  if (Keyboard and InStr(r,"Send,") and Delay<1000)
-  {
-    LogArr[i]:=r . str
-    return
-  }
-  if (Delay>200)
-    LogArr.Push("Sleep, " (Delay//2))
-  LogArr.Push(Keyboard ? "Send, {Blind}" str : str)
+TimeRecord()
+{
+	global LastTime
+	static TimeCount
+	TimeCount := A_TickCount - LastTime
+,	LastTime := A_TickCount
+	return TimeCount
 }
 
-;============ The End ============
+Controlpos(z1, z2)
+{
+	return z1 - z2
+}
 
-;
